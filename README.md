@@ -42,3 +42,4 @@ This code is based on the implementations of [**Deep person reID**](https://gith
 ## Citation
 If you use this code for your research, please cite our paper.
 
+Zulfiqar, F., Bajwa, U.I. & Raza, R.H. Multi-camera person re-identification using spatiotemporal context modeling. Neural Comput & Applic 35, 20117–20142 (2023). https://doi.org/10.1007/s00521-023-08799-0
