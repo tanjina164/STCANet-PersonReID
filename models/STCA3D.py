@@ -5,7 +5,7 @@ import math
 from torch import nn
 from torch.nn import functional as F
 import numpy as np
-from models.STAM import STAModule
+from models.STAM import STIAUModule
 
 
 class ConvBlock(nn.Module):
@@ -41,7 +41,7 @@ class STCABlock3D(nn.Module):
 
         self.SA = SpatialAttn(in_channels, number=4)
         self.g = nn.Conv2d(self.in_channels, self.inter_channels, kernel_size=1, stride=1, padding=0, bias=True)
-        self.STAM = STAModule(self.inter_channels, T=seq_len)
+        self.STAM = STIAUModule(self.inter_channels, T=seq_len)
 
         self.W1 = nn.Sequential(
                 conv_nd(self.in_channels, self.in_channels,

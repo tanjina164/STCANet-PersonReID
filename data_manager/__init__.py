@@ -4,11 +4,13 @@ from __future__ import print_function
 
 from .mars import Mars
 from .duke import DukeMTMCVidReID
+from .market1501 import Market1501
 
 
 __vidreid_factory = {
     'mars': Mars,
     'duke': DukeMTMCVidReID,
+    'market1501': Market1501,
 }
 
 

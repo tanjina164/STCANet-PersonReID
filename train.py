@@ -38,7 +38,7 @@ parser = argparse.ArgumentParser(description='Train STCANet3D')
 # Datasets
 parser.add_argument('--root', type=str, default='')
 parser.add_argument('-d', '--dataset', type=str, default='mars', # duke, mars
-                    choices=data_manager.get_names())
+                    choices=['mars', 'duke', 'market1501'])
 parser.add_argument('-j', '--workers', default=0, type=int,
                     help="number of data loading workers (default: 4)") # default = 4, 0
 parser.add_argument('--height', type=int, default=256,
@@ -327,7 +327,7 @@ def test(model, queryloader, galleryloader, use_gpu, ranks=[1, 5, 10, 20]):
     g_pids = np.asarray(g_pids)
     g_camids = np.asarray(g_camids)
 
-    if args.dataset == 'mars' or args.dataset == 'lsvid':
+    if (args.dataset == 'mars' or args.dataset == 'lsvid') and args.dataset != 'market1501':
         print('process the dataset {}!'.format(args.dataset))
         # gallery set must contain query set, otherwise 140 query imgs will not have ground truth.
         gf = torch.cat((qf, gf), 0)
