@@ -62,7 +62,7 @@ def main():
     model.eval()
     print("==> Model weights loaded successfully!")
 
-    # ৫. ডেটাসেট ইনিশিয়ালাইজেশন (সঠিক কুয়েরি পাথ দিয়ে ফিক্সড)
+    # ৫. ডেটাসেট ইনিশিয়ালাইজেশন
     print("==> Loading Market-1501 dataset...")
     dataset = data_manager.init_dataset(name='market1501', root='/kaggle/input/datasets/jiniyatanjina/')
     print("==> Market-1501 dataset loaded successfully!")
@@ -74,14 +74,14 @@ def main():
         ST.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
-    # ৭. কুয়েরি এবং গ্যালারি লোডার তৈরি করা
+    # ৭. কুয়েরি এবং গ্যালারি লোডার তৈরি করা (ভিডিওডাটাসেটের আসল আর্গুমেন্ট স্ট্রাকচার অনুযায়ী ফিক্সড)
     queryloader = DataLoader(
-        VideoDataset(dataset.query, seq_len=4, sample='video_train', transform=spatial_transform),
+        VideoDataset(dataset.query, spatial_transform=spatial_transform, temporal_transform=None),
         batch_size=32, shuffle=False, num_workers=4, pin_memory=True
     )
 
     galleryloader = DataLoader(
-        VideoDataset(dataset.gallery, seq_len=4, sample='video_train', transform=spatial_transform),
+        VideoDataset(dataset.gallery, spatial_transform=spatial_transform, temporal_transform=None),
         batch_size=32, shuffle=False, num_workers=4, pin_memory=True
     )
     print("==> DataLoaders successfully created!")
