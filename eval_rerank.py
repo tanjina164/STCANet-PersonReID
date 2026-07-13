@@ -28,8 +28,7 @@ def main():
     model.eval()
     print("--> Model weights loaded successfully!")
 
-    # নোটবুকের গ্লোবাল এনভায়রনমেন্ট থেকে লোডারগুলো অ্যাক্সেস করা হচ্ছে
-    # (ফাইলটি যখন কাগল সেলে রান হবে তখন মেমরিতে থাকা লোডার রিড করবে)
+   
     global queryloader, galleryloader
     
     print("--> Extracting Query and Gallery features...")
@@ -50,7 +49,7 @@ def main():
     final_dist = k_reciprocal_re_ranking(q_g_dist, q_q_dist, g_g_dist, k1=20, k2=6, lambda_value=0.3)
     
     print("--> Re-ranking completed inside script!")
-    # এখানে তোমার ফাইনাল CMC/mAP ক্যালকুলেশন স্ক্রিপ্ট কল হতে পারে
+   
 
 if __name__ == '__main__':
     main()
