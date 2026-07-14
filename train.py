@@ -177,8 +177,24 @@ def main():
 
     if args.resume:
         print("Loading checkpoint from '{}'".format(args.resume))
-        checkpoint = torch.load(args.resume)
-        model.load_state_dict(checkpoint['state_dict'])
+        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        checkpoint = torch.load(args.resume, map_location=device, weights_only=False)
+        state_dict = checkpoint['state_dict']
+        model_dict = model.state_dict()
+        # শেইপ ম্যাচিং এবং ফিল্টারিং লুপ
+        filtered_dict = {}
+        for k, v in state_dict.items():
+            if k in model_dict:
+                if v.shape == model_dict[k].shape:
+                    filtered_dict[k] = v
+                else:
+                    print(f'[INFO] Size mismatch for {k}: checkpoint {v.shape} vs current model {model_dict[k].shape}. Skipped!')
+            else:
+                print(f'[INFO] Missing key in current model: {k}. Skipped!')
+        
+        model_dict.update(filtered_dict)
+        model.load_state_dict(model_dict)
         start_epoch = checkpoint['epoch']
     
     if use_gpu:
@@ -188,7 +204,18 @@ def main():
     train_time = 0
     best_mAP = -np.inf
     best_epoch = 0
-    print("==> Start training")
+    if args.resume:
+        print('==> [EVAL-ONLY MODE] Running evaluation on Query & Gallery...')
+        with torch.no_grad():
+            test(model, queryloader, galleryloader, use_gpu)
+        return
+    
+    if args.resume:
+        print('==> [EVAL-ONLY MODE] Running evaluation on Query & Gallery...')
+        with torch.no_grad():
+            test(model, queryloader, galleryloader, use_gpu)
+        return
+    print('==> Start training')
 
     for epoch in range(start_epoch, args.max_epoch):
 

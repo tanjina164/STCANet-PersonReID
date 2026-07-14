@@ -61,37 +61,35 @@ class Wcompute(nn.Module):
         W_new = torch.transpose(W_new, 1, 3)  
         W_new = W_new.squeeze(3) 
 
-        W_new = W_new - W_id.expand_as(W_new) * 1e8
+        W_id_dynamic = torch.eye(W_new.size(-1), dtype=W_new.dtype, device=W_new.device).unsqueeze(0).expand_as(W_new)
+        W_new = W_new - W_id_dynamic * 1e8
         W_new = F.softmax(W_new, dim=2)
         return W_new
 
 class STIAUModule(nn.Module):
-    def __init__(self, in_channels, T, N=4):
+    def __init__(self, in_channels, T=None, N=4): 
         super(STIAUModule, self).__init__()
-        self.T = T
         self.N = N
         self.in_channels = in_channels
         self.module_w = Wcompute(in_channels)
         self.module_l = Gconv(in_channels)
 
         W0 = torch.eye(N)
-        W = (1 - W0).repeat(T, T)
-        for i in range(T):
-            W[i*N: (i+1)*N, i*N: (i+1)*N] = W0
-        self.register_buffer('W_init_base', W)
+        self.register_buffer('W_init_base', W0)
 
     def forward(self, x, y):
         bs, t, N, C = x.size()
-        x = x.view(bs, -1, C)
+        
+        # ইমেজভিত্তিক হওয়ায় টেম্পোরাল ডাইমেনশন সম্পূর্ণ বাদ দিয়ে সরাসরি N x C শেইপে নেওয়া হলো
+        C_current = x.size(-1) if len(x.shape) > 2 else C
+        x = x.view(bs, -1, C_current) 
 
-        if t == 1:
-            W_init = torch.eye(N, device=x.device)
-        elif t == self.T:
-            W_init = self.W_init_base
-        else:
-            W_init = self.W_init_base[:t*N, :t*N]
+        W_init = self.W_init_base
 
         W = self.module_w(x, W_init.unsqueeze(0).expand(bs, -1, -1), y) 
         s = self.module_l(W, x) 
-        s = s.view(bs, t, N, C)
+        
+        # পুনরায় ৪D টেনসরে কনভার্ট করে রিটার্ন করা হচ্ছে [bs, 1, N, C]
+        C_current = s.size(-1) if len(s.shape) > 2 else C
+        s = s.view(bs, 1, -1, C_current)
         return s

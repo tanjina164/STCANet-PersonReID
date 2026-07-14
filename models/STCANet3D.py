@@ -29,7 +29,7 @@ class STCANet3D(nn.Module):
         self.loss = loss
         self.use_gpu = use_gpu
         
-        # 🌟 dynamic resnets1 load handle
+        # dynamic resnets1 load handle
         from models.resnets1 import resnet50_s1
         from models import inflate
         
@@ -160,7 +160,7 @@ class Bottleneck3d(nn.Module):
         return out
 
 class STCABlock3D(nn.Module):
-    def __init__(self, in_channels, seq_len=4):
+    def __init__(self, in_channels):
         super(STCABlock3D, self).__init__()
         self.in_channels = in_channels
         conv_nd = nn.Conv3d
@@ -169,7 +169,9 @@ class STCABlock3D(nn.Module):
 
         self.SA = SpatialAttn(in_channels, number=4)
         self.g = nn.Conv2d(self.inter_channels, self.inter_channels, kernel_size=1, stride=1, padding=0, bias=True)
-        self.STAM = STIAUModule(self.inter_channels, T=seq_len)
+        
+        # T=seq_len প্যারামিটারটি বাদ দেওয়া হয়েছে
+        self.STAM = STIAUModule(self.inter_channels, N=4)
 
         self.W1 = nn.Sequential(
                 conv_nd(self.in_channels, self.in_channels, kernel_size=1, stride=1, padding=0, bias=True),
@@ -237,6 +239,8 @@ class STCABlock3D(nn.Module):
 
         x = self.apply_attention(x, a)
         x, u = self.reduce_dimension(x, u)
+        
+        # STAM-কে সরাসরি কল করা হচ্ছে কোনো T বা temporal frames প্যারামিটার ছাড়াই
         y = self.STAM(x, u) 
 
         y = torch.mean(y, 2) 
