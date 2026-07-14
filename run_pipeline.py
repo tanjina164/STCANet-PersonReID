@@ -6,7 +6,8 @@ from torch.utils.data import DataLoader
 import importlib.util
 from torchvision import transforms as T
 
-ROOT_DIR = '/kaggle/working/Person-ReID-STCANet'
+# ১. ডাইনামিক রুট পাথ সেটআপ
+ROOT_DIR = os.path.abspath(os.path.dirname(__file__))
 sys.path.append(ROOT_DIR)
 sys.path.append(os.path.join(ROOT_DIR, 'tools'))
 sys.path.append(os.path.join(ROOT_DIR, 'data_manager'))
@@ -15,12 +16,19 @@ import data_manager
 from video_loader import VideoDataset
 from models.STCANet3D import STCANet3D
 
-# সরাসরি Absolute Path থেকে k_reciprocal_re_ranking লোড করা
+# utils/rerank.py থেকে অরিজিনাল ফাংশন 'k_reciprocal_re_ranking' লোড করা
 rerank_path = os.path.join(ROOT_DIR, 'utils', 'rerank.py')
 spec = importlib.util.spec_from_file_location("rerank", rerank_path)
 rerank_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(rerank_module)
-k_reciprocal_re_ranking = rerank_module.k_reciprocal_re_ranking
+re_ranking_fn = rerank_module.k_reciprocal_re_ranking
+
+# evaluation.py থেকে অরিজিনাল মেট্রিক ক্যালকুলেটর 'evaluate' লোড করা
+eval_path = os.path.join(ROOT_DIR, 'evaluation.py')
+spec_eval = importlib.util.spec_from_file_location("evaluation", eval_path)
+eval_module = importlib.util.module_from_spec(spec_eval)
+spec_eval.loader.exec_module(eval_module)
+evaluate_fn = eval_module.evaluate
 
 def extract_features(model, dataloader):
     model.eval()
@@ -28,9 +36,15 @@ def extract_features(model, dataloader):
     print("   -> Starting feature extraction loop...")
     with torch.no_grad():
         for batch_idx, (imgs, pid, camid) in enumerate(dataloader):
+            # STCANet3D এর জন্য ইমেজকে ৫ডি টেনসরে রূপান্তর করা [B, C, T, H, W]
+            if imgs.dim() == 4:
+                imgs = imgs.unsqueeze(2) # [B, C, 1, H, W]
+                
             imgs = imgs.cuda()
             outputs = model(imgs)
-            features.append(outputs.cpu().numpy())
+            
+            # মেমোরি গ্রাফ বিচ্ছিন্ন করে নিরাপদভাবে NumPy-তে কনভার্ট করা
+            features.append(outputs.detach().cpu().numpy())
             pids.extend(pid.numpy())
             camids.extend(camid.numpy())
             if (batch_idx + 1) % 50 == 0:
@@ -39,8 +53,14 @@ def extract_features(model, dataloader):
 
 def main():
     print("==> Loading STCANet3D Model...")
-    model = STCANet3D(num_classes=751, use_gpu=True).cuda()
-    checkpoint = torch.load('/kaggle/working/Person-ReID-STCANet/logs/best_model.pth.tar', weights_only=False)
+    # 🌟 পজিশনাল ও কি-ওয়ার্ড আর্গুমেন্ট ট্র্যাপ এড়াতে এক্সপ্লিসিটলি পাস করা হলো
+    model = STCANet3D(num_classes=751, use_gpu=True, loss={'xent', 'htri'}).cuda()
+    
+    checkpoint_path = os.path.join(ROOT_DIR, 'logs', 'best_model.pth.tar')
+    if not os.path.exists(checkpoint_path):
+        raise FileNotFoundError(f"Model weights not found at: {checkpoint_path}")
+        
+    checkpoint = torch.load(checkpoint_path, map_location='cuda', weights_only=False)
     model.load_state_dict(checkpoint['state_dict'])
     model.eval()
     print("==> Model weights loaded successfully!")
@@ -83,11 +103,37 @@ def main():
     g_g_dist = np.nan_to_num(np.clip(g_g_dist, 0, None))
 
     print("==> Applying K-reciprocal Re-ranking...")
-    final_dist = k_reciprocal_re_ranking(q_g_dist, q_q_dist, g_g_dist, k1=20, k2=6, lambda_value=0.3)
-
+    final_dist = re_ranking_fn(q_g_dist, q_q_dist, g_g_dist, k1=20, k2=6, lambda_value=0.3)
     print("==> [SUCCESS] Re-ranking completed successfully!")
-    np.save('/kaggle/working/Person-ReID-STCANet/final_dist.npy', final_dist)
-    print("==> Saved final distance matrix to 'final_dist.npy'")
+    
+    output_npy_path = os.path.join(ROOT_DIR, 'final_dist.npy')
+    np.save(output_npy_path, final_dist)
+    print(f"==> Saved final distance matrix to '{output_npy_path}'")
+
+    # --- মেট্রিক ইভালুয়েশন ও নিরাপদ আউটপুট প্রিন্টিং ---
+    print("\n==> Evaluating Re-ID performance...")
+    q_pids_eval = np.array([x[1] for x in queryloader.dataset.dataset])
+    q_camids_eval = np.array([x[2] for x in queryloader.dataset.dataset])
+    g_pids_eval = np.array([x[1] for x in galleryloader.dataset.dataset])
+    g_camids_eval = np.array([x[2] for x in galleryloader.dataset.dataset])
+
+    cmc, mAP = evaluate_fn(final_dist, q_pids_eval, g_pids_eval, q_camids_eval, g_camids_eval)
+
+    mAP_val = float(np.mean(mAP)) if hasattr(mAP, '__len__') else float(mAP)
+    
+    print("\n" + "="*40)
+    print("        STCANet PipeLine Results       ")
+    print("="*40)
+    print(f"  mAP     : {mAP_val*100:.2f}%")
+    
+    ranks = [1, 5, 10, 20]
+    for r in ranks:
+        if len(cmc) >= r:
+            rank_val = float(cmc[r-1])
+            print(f"  Rank-{r:<3}: {rank_val*100:.2f}%")
+            
+    print("="*40)
+    return
 
 if __name__ == '__main__':
     main()

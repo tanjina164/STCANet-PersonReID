@@ -91,7 +91,7 @@ class VideoDataset(data.Dataset):
         clip = self.loader(img_paths, mode='RGB')
 
         if self.spatial_transform is not None:
-            self.spatial_transform.randomize_parameters()
+            pass # Line commented out for evaluation
             clip = [self.spatial_transform(img) for img in clip]
 
         # trans T x C x H x W to C x T x H x W
