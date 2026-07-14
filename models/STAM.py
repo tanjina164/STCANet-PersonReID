@@ -1,9 +1,7 @@
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
 import torch.nn.functional as F
 import math
-
 
 class Gconv(nn.Module):
     def __init__(self, in_channels):
@@ -13,7 +11,7 @@ class Gconv(nn.Module):
         fsm_blocks.append(nn.BatchNorm2d(in_channels))
         fsm_blocks.append(nn.ReLU(inplace=True))
         self.fsm = nn.Sequential(*fsm_blocks)
-        # init
+        
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
@@ -24,14 +22,12 @@ class Gconv(nn.Module):
 
     def forward(self, W, x):
         bs, n, c = x.size()
-
         x_neighbor = torch.bmm(W, x) 
         x = torch.cat([x, x_neighbor], 2) 
         x = x.view(-1, x.size(2), 1, 1) 
         x = self.fsm(x) 
         x = x.view(bs, n, c)
         return x 
-
 
 class Wcompute(nn.Module):
     def __init__(self, in_channels):
@@ -43,7 +39,6 @@ class Wcompute(nn.Module):
         edge_block.append(nn.BatchNorm2d(1))
         self.relation = nn.Sequential(*edge_block)
 
-        #init
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
@@ -51,7 +46,6 @@ class Wcompute(nn.Module):
             elif isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
-        
 
     def forward(self, x, W_id, y):
         bs, N, C = x.size()
@@ -71,11 +65,11 @@ class Wcompute(nn.Module):
         W_new = F.softmax(W_new, dim=2)
         return W_new
 
-
 class STIAUModule(nn.Module):
     def __init__(self, in_channels, T, N=4):
         super(STIAUModule, self).__init__()
         self.T = T
+        self.N = N
         self.in_channels = in_channels
         self.module_w = Wcompute(in_channels)
         self.module_l = Gconv(in_channels)
@@ -84,18 +78,20 @@ class STIAUModule(nn.Module):
         W = (1 - W0).repeat(T, T)
         for i in range(T):
             W[i*N: (i+1)*N, i*N: (i+1)*N] = W0
-        self.W_init = W
+        self.register_buffer('W_init_base', W)
 
     def forward(self, x, y):
         bs, t, N, C = x.size()
         x = x.view(bs, -1, C)
 
-        if t == self.T:
-            W_init = self.W_init 
+        if t == 1:
+            W_init = torch.eye(N, device=x.device)
+        elif t == self.T:
+            W_init = self.W_init_base
         else:
-            W_init = self.W_init[:t*N, :t*N]
+            W_init = self.W_init_base[:t*N, :t*N]
 
-        W = self.module_w(x, W_init.unsqueeze(0).cuda(), y) 
+        W = self.module_w(x, W_init.unsqueeze(0).expand(bs, -1, -1), y) 
         s = self.module_l(W, x) 
         s = s.view(bs, t, N, C)
         return s
